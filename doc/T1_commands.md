@@ -21,7 +21,7 @@
  - Output: `reports/process/B2_pstree.txt`
  - Description: `Outputs the process tree with visible PIDs`
 ## pgrep sleep (B3)
- - command: `(sleep 60 &) && pgrep -l sleep > reports/process/B3_pgrep_sleep.txt`
+ - Command: `(sleep 60 &) && pgrep -l sleep > reports/process/B3_pgrep_sleep.txt`
  - Output: `reports/process/B3_pgrep_sleep.txt`
  - Description: `Creates a test process and outputs its PID and name identified by the name`
  - Note: `To stop the resulting process the command killall sleep or kill <pid> should be executed, where <pid> is the outputted pid of the process`
@@ -49,3 +49,7 @@
  - Command: `ps --delimiter ' ' -e --format size,pid,cmd | sort -t' ' -k3 -u | sort -t' ' -k1n | tail -n5 | cut -f2,3- -d' ' > reports/pipeline/D2_top5_proc_mem_pid_name.txt`
  - Output: `reports/pipeline/D2_top5_proc_mem_pid_name.txt`
  - Description: `Selects all processes formatted by size, pid and name, sorts them by name to eliminate duplicates, sorts them by used memory, trims it to the top 5 and outputs only process pid and name`
+## count commands (D3)
+ - Command: `grep "Command: " doc/T1_commands.md | sort | wc -l > reports/pipeline/D3_count_commands.txt`
+ - Output: `reports/pipeline/D3_count_commands.txt`
+ - Description: `Searches for lines that contain commands in doc/T1_commands.md, sorts them and outputs their count`
