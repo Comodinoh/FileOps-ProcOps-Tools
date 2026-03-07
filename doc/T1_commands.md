@@ -24,7 +24,7 @@
  - command: `(sleep 60 &) && pgrep -l sleep > reports/process/B3_pgrep_sleep.txt`
  - Output: `reports/process/B3_pgrep_sleep.txt`
  - Description: `Creates a test process and outputs its PID and name identified by the name`
- - Note: `To stop the resulting process the command killall sleep or kill <pid>, where <pid> is the outputted pid of the process`
+ - Note: `To stop the resulting process the command killall sleep or kill <pid> should be executed, where <pid> is the outputted pid of the process`
 
 # /proc commands (C)
 ## cpu model (C1)
