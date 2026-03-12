@@ -1,6 +1,6 @@
 #!/bin/bash
 
-START=$(date)
+START=$(date --rfc-3339=ns)
 
 mkdir -p reports/fs reports/process/ reports/proc reports/pipeline
 
@@ -24,10 +24,15 @@ find -type f ! -wholename *.git/* -printf "%sB %p\n" | sort --field-separator=' 
 ps --delimiter ' ' -e --format size,pid,cmd | sort -t' ' -k3 -u | sort -t' ' -k1n | tail -n5 | cut -f2,3- -d' ' > reports/pipeline/D2_proc_mem_pid_name.txt
 grep "Command: " doc/T1_commands.md | sort | wc -l > reports/pipeline/D3_count_commands.txt
 
-END=$(date)
+END=$(date --rfc-3339=ns)
+
+eval START_EPOCH=\$\(date --date=\"$START\" +%s%N\)
+eval END_EPOCH=\$\(date --date=\"$END\" +%s%N\)
+let RUNTIME=END_EPOCH-START_EPOCH
 
 echo "Started At: ${START}" > reports/T1_summary.txt
 echo "Ended At: ${END}" >> reports/T1_summary.txt
+echo "Runtime: ${RUNTIME} nanoseconds" >> reports/T1_summary.txt
 echo "Written to files: " >> reports/T1_summary.txt
 echo " - reports/fs/A1_ls_long.txt" >> reports/T1_summary.txt
 echo " - reports/fs/A2_find_sh.txt" >> reports/T1_summary.txt
