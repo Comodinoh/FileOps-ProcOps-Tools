@@ -25,4 +25,9 @@ or
 source . tools/t1_audit.sh
 ```
 
+If you're using the 1st method, make sure the file has executable permissions with:
+```bash
+chmod u+x tools/t1_audit.sh
+```
+
 The generated reports will then be stored in `reports/`.
