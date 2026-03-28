@@ -51,5 +51,6 @@
  - Description: `Selects all processes formatted by size, pid and name, sorts them by name to eliminate duplicates, sorts them by used memory, trims it to the top 5 and outputs only process pid and name`
 ## count commands (D3)
  - Command: `grep "Command: " doc/T1_commands.md | sort | wc -l > reports/pipeline/D3_count_commands.txt`
- - Output: `reports/pipeline/D3_count_commands.txt`
+ - Output: `reports/pipeline/D3_count_commands.txt` 
  - Description: `Searches for lines that contain commands in doc/T1_commands.md, sorts them and outputs their count`
+
