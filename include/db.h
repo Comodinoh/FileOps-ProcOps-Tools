@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#define ERRCHECK(x, ...) do { if((x) == -1) perror(#__VA_ARGS__); } while(0)
+
 typedef enum {
     SNAPSHOT_OPEN = 0,
     SNAPSHOT_SEALED
@@ -13,7 +15,7 @@ typedef uint32_t(*db_generate_snapshot_func)(const char*);
 
 
 typedef struct {
-    const char*       signature;
+    char              signature[32];
     uint8_t           format_version;
     uint32_t          snapshot_id;
     db_snapshot_state snapshot_state;
@@ -40,28 +42,37 @@ typedef struct {
     };
 } db_column_value;
 
+typedef struct {
+    uint16_t size;
+    char*    str;
+} db_varchar;
+
 typedef int(*db_row_filter_func)(db_column_value*, size_t);
 
 typedef struct {
-    const char* signature;
+    char signature[32];
     db_column* columns;
     size_t     count;
 } db_schema;
 
 typedef struct {
-    size_t                    row_size;
     db_schema                 schema;
     db_generate_snapshot_func generate_snapshot;
     const char*               filepath;
+    int                       fd;
 } db_connection;
 
 int  db_open_connection(db_connection* connection, const char* filepath, db_schema* schema, db_generate_snapshot_func generate_snapshot);
-void db_select_header(db_connection* connection, db_header* header);
-void db_update_header(db_connection* connection, db_header new_header);
-void db_select(db_connection* connection, db_column* columns, db_row_filter_func filter);
-void db_update(db_connection* connection, db_column* columns, db_column_value* values, size_t count, db_row_filter_func filter);
-void db_insert(db_connection* connection, db_column* columns, db_column_value* values, size_t count);
+int db_select_header(db_connection* connection, db_header* header);
+int db_update_header(db_connection* connection, db_header new_header);
+int db_select(db_connection* connection, db_column* columns, db_row_filter_func filter);
+int db_update(db_connection* connection, db_column* columns, db_column_value* values, size_t count, db_row_filter_func filter);
+int db_insert(db_connection* connection, db_column* columns, db_column_value* values, size_t count);
 void db_close_connection(db_connection* connection);
+
+void db_varchar_free(db_varchar* varchar);
+
+void _db_parse_varchar(db_connection* connection, db_varchar* varchar);
 
 
 #endif
