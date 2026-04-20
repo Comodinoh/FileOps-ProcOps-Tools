@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define ERRCHECK(x, ...) do { if((x) == -1) perror(#__VA_ARGS__); } while(0)
+#define ERRCHECK(x, ...) do { if((x) == -1) {__VA_OPT__(fprintf(stderr, __VA_ARGS__);) perror(NULL);} } while(0)
 
 typedef enum {
     SNAPSHOT_OPEN = 0,
@@ -12,7 +12,6 @@ typedef enum {
 } db_snapshot_state;
 
 typedef uint32_t(*db_generate_snapshot_func)(const char*);
-
 
 typedef struct {
     char              signature[32];
