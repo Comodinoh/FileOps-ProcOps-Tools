@@ -20,7 +20,7 @@ function init () {
 
 
 function compile_obj () {
-    $CC $CFLAGS -c -o $2 $1
+    log_cmd $CC $CFLAGS -c -o $2 $1
 }
 
 function build() {

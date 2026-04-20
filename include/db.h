@@ -3,8 +3,9 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 
-#define ERRCHECK(x, ...) do { if((x) == -1) {__VA_OPT__(fprintf(stderr, __VA_ARGS__);) perror(NULL);} } while(0)
+constexpr size_t DB_SIGNATURE_LEN = 32;
 
 typedef enum {
     SNAPSHOT_OPEN = 0,
@@ -14,7 +15,7 @@ typedef enum {
 typedef uint32_t(*db_generate_snapshot_func)(const char*);
 
 typedef struct {
-    char              signature[32];
+    char              signature[DB_SIGNATURE_LEN];
     uint8_t           format_version;
     uint32_t          snapshot_id;
     db_snapshot_state snapshot_state;
@@ -23,9 +24,9 @@ typedef struct {
 } db_header;
 
 typedef enum {
-    STRING,
-    INT,
-    DOUBLE
+    DB_STRING,
+    DB_INT,
+    DB_DOUBLE
 } db_column_kind;
 
 typedef struct {
@@ -57,11 +58,11 @@ typedef struct {
 typedef struct {
     db_schema                 schema;
     db_generate_snapshot_func generate_snapshot;
-    const char*               filepath;
+    char*                     filepath;
     int                       fd;
 } db_connection;
 
-int  db_open_connection(db_connection* connection, const char* filepath, db_schema* schema, db_generate_snapshot_func generate_snapshot);
+void db_open_connection(db_connection* connection, const char* filepath, db_schema* schema, db_generate_snapshot_func generate_snapshot);
 int db_select_header(db_connection* connection, db_header* header);
 int db_update_header(db_connection* connection, db_header new_header);
 int db_select(db_connection* connection, db_column* columns, db_row_filter_func filter);
