@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 constexpr size_t DB_SIGNATURE_LEN = 32;
+constexpr size_t DB_STRING_LEN = 64;
 
 typedef enum {
     SNAPSHOT_OPEN = 0,
@@ -23,6 +24,13 @@ typedef struct {
     uint32_t          record_count;
 } db_header;
 
+
+typedef struct {
+    size_t      count;
+    size_t      capacity;
+    uint32_t*   offsets;
+} db_offset_table;
+
 typedef enum {
     DB_STRING,
     DB_INT,
@@ -36,7 +44,7 @@ typedef struct {
 
 typedef struct {
     union {
-        const char* str_value;
+        char        str_value[DB_STRING_LEN];
         int         int_value;
         double      double_value;
     };
@@ -62,17 +70,10 @@ typedef struct {
     int                       fd;
 } db_connection;
 
-void db_open_connection(db_connection* connection, const char* filepath, db_schema* schema, db_generate_snapshot_func generate_snapshot);
-int db_select_header(db_connection* connection, db_header* header);
-int db_update_header(db_connection* connection, db_header new_header);
-int db_select(db_connection* connection, db_column* columns, db_row_filter_func filter);
-int db_update(db_connection* connection, db_column* columns, db_column_value* values, size_t count, db_row_filter_func filter);
-int db_insert(db_connection* connection, db_column* columns, db_column_value* values, size_t count);
+bool db_open_connection(db_connection* connection, const char* filepath, db_schema* schema, db_generate_snapshot_func generate_snapshot);
+void db_select(db_connection* connection, db_column* columns, db_row_filter_func filter);
+void db_update(db_connection* connection, db_column* columns, db_column_value* values, size_t count, db_row_filter_func filter);
+void db_insert(db_connection* connection, db_column* columns, db_column_value* values, size_t count);
 void db_close_connection(db_connection* connection);
-
-void db_varchar_free(db_varchar* varchar);
-
-void _db_parse_varchar(db_connection* connection, db_varchar* varchar);
-
 
 #endif
