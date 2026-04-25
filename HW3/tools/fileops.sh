@@ -46,8 +46,12 @@ function build() {
     OBJ_FILE=./tmp/obj/$(basename $SRC_FILE .c).o
 
     if [ -f $OBJ_FILE ]; then
-        if [ $SRC_LAST_MODIFIED -nt $OBJ_LAST_MODIFIED ]; then
+        if [ $SRC_FILE -nt $OBJ_FILE ]; then
             compile_obj "$SRC_FILE" "$OBJ_FILE"
+            if [ $cmd_status -ne 0 ]; then
+                echo "ERROR: Could not compile src file $SRC_FILE" >&2
+                log_exit "$cmd_status"
+            fi
             if [ -z $SILENT ]; then
                 echo "Recompiled $SRC_FILE -> $OBJ_FILE"
             fi
@@ -140,7 +144,8 @@ function log_cmd () {
     cmd=$*
     
     log $cmd
-    eval $cmd
+    $cmd
+    cmd_status=$?
 }
 
 function log () {
@@ -218,7 +223,7 @@ case $subcmd in
         shift 1
 
         if [ ! -f "./bin/$1" ]; then
-            echo "error: executable $1 does not exit" >&2
+            echo "ERROR: executable $1 does not exit" >&2
             log_exit 1
         fi
 
@@ -232,7 +237,7 @@ case $subcmd in
         build $SRC_DIR
 
         if [ ! -d $SRC_DIR ]; then
-            echo "error: '$SRC_DIR' does not exist or is not a directory" >& 2
+            echo "ERROR: '$SRC_DIR' does not exist or is not a directory" >& 2
             log_exit 1
         fi
         

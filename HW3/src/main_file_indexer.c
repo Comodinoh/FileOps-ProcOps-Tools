@@ -1,6 +1,10 @@
+#include "lock.h"
 #include <db.h>
+#include <linux/limits.h>
 #include <time.h>
+#include <sys/stat.h>
 #include <unistd.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,7 +25,7 @@ size_t hash_file(int fd) {
     ssize_t bytes_read = 0;
     while((bytes_read = read(fd, buf, page_size)) != 0) {
         for(long i = 0; i < bytes_read; i++) {
-            sum = (sum*33 ^ buf[i]);
+            sum = (sum*33 + buf[i]);
         }
     }
 
@@ -39,14 +43,21 @@ typedef enum {
 } db_indexer_ftype;
 
 typedef struct {
+    ino_t st_ino;
+    dev_t st_dev;
+} db_indexer_bname;
+
+typedef struct __attribute__((packed)) {
     char                absolute_path[DB_STRING_LEN];
     db_indexer_ftype    type; 
     uint32_t            size;
     uint32_t            last_modification;
     size_t              hash;
-    char                bname[256];
+    // db_indexer_bname    bname;
     bool                symlink;
-    char                symlink_target[256];
+    char                symlink_target[DB_STRING_LEN];
+    ino_t               st_ino;
+    dev_t               st_dev;
 } db_indexer_row;
 
 bool db_indexer_compare(db_indexer_row* r1, db_indexer_row* r2) {
@@ -65,41 +76,166 @@ void db_indexer_upsert(db_connection* connection, db_indexer_row* row) {
 
     lseek(fd, sizeof(db_header), SEEK_SET);
     db_indexer_row irow;
-    for(size_t i = 0; i < record_count; i++) {
+    size_t i;
+    for(i = 0; i < record_count; i++) {
+        db_lock_read_region_wait(fd, 0, sizeof(db_indexer_row));
+
         ERRCHECK(read(fd, &irow, sizeof(db_indexer_row)), "[FileIndexer] UPSERT: Could not read row %zu for %s\n", i, connection->filepath);
+
+        db_unlock_region(fd, -sizeof(db_indexer_row), sizeof(db_indexer_row));
+
         if(db_indexer_compare(row, &irow)) {
 
+            db_lock_write_region_wait(fd, -sizeof(db_indexer_row), sizeof(db_indexer_row)); 
+
+            lseek(fd, -sizeof(db_indexer_row), SEEK_CUR);
+
+            ERRCHECK(write(fd, row, sizeof(db_indexer_row)), "[FileIndexer] UPSERT: Could not overwrite row %zu for %s\n", i, connection->filepath);
+
+
+            db_unlock_region(fd, -sizeof(db_indexer_row), sizeof(db_indexer_row));
+
+            lseek(fd, temp, SEEK_SET);
+            return;
         }
     }
+    
+    while(!db_lock_write_region(fd, 0, sizeof(db_indexer_row))) {
+        lseek(fd, sizeof(db_indexer_row), SEEK_CUR);
+        i++;
+    }
 
+    ERRCHECK(write(fd, row, sizeof(db_indexer_row)), "[FileIndexer] UPSERT: Could not insert row %zu for %s\n", i, connection->filepath);
+
+    db_unlock_region(fd, -sizeof(db_indexer_row), sizeof(db_indexer_row));
+
+    db_inc_record_count(connection);
 
     lseek(fd, temp, SEEK_SET);
-
-    return true;
 }
 
-int main(void) {
-    int fd = open("test.txt", O_RDONLY);
-    
+void traverse_file_tree(db_connection* connection, const char* path) {
+    struct dirent* entry;
+    DIR* dir = opendir(path);
 
-    //srand(time(NULL));
+    if(!dir) {
+        fprintf(stderr, "[FileIndexer]: Cannot open directory %s:\n", path);
+        perror(0);
+        return;
+    }
 
-    /*for(size_t j = 0; j < 100; j++) {
-        char test[100] = {0};
-        for(size_t i = 0; i < sizeof(test)/sizeof(test[0]); i++) {
-            char c = rand() % 255;
-            while(c == '\0') {
-                c = rand() % 255;
+    while((entry = readdir(dir)) != NULL) {
+        if(strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+            char p[PATH_MAX] = {0};
+            snprintf(p, PATH_MAX, "%s/%s", path, entry->d_name);
+
+            struct stat st;
+
+            if(stat(p, &st) == -1) return;
+
+            db_indexer_row row = {0};
+            memset(&row, 0, sizeof(row));
+
+            char* str = realpath(p, NULL);
+
+            strncpy(row.absolute_path, str, DB_STRING_LEN);
+            row.absolute_path[DB_STRING_LEN-1] = '\0';
+
+            free(str);
+
+            bool is_dir = false;
+
+            if(S_ISLNK(st.st_mode)) {
+                row.symlink = true;
+                char target[DB_STRING_LEN] = {0};
+
+                if(readlink(p, target, DB_STRING_LEN) == -1) {
+                    return;
+                }
+
+                memcpy(row.symlink_target, target, DB_STRING_LEN);
+
+                row.type = FILE_TYPE_SYM;
+            }
+            else if(S_ISDIR(st.st_mode)) {
+                row.type = FILE_TYPE_DIR;
+                is_dir = true;
+            }
+            else if(S_ISREG(st.st_mode)) {
+                row.type = FILE_TYPE_REGULAR;
+
+                row.last_modification = st.st_mtim.tv_sec;
+                int fd = open(p, O_RDONLY);
+                row.hash = hash_file(fd);
+                close(fd);
+
+                row.size = st.st_size;
+            }
+            else if(S_ISFIFO(st.st_mode)) {
+                row.type = FILE_TYPE_FIFO;
             }
 
-            test[i] = c;
+
+            // row.bname = (db_indexer_bname){.st_dev = st.st_dev, .st_ino = st.st_ino};
+            
+            row.st_dev = st.st_dev;
+            row.st_ino = st.st_ino;
+
+            db_indexer_upsert(connection, &row);
+
+            if(is_dir) {
+                traverse_file_tree(connection, p);
+            }
         }
-    }*/
 
-    printf("%zu\n", hash_file(fd));
+    }
+}
 
+int main(int argc, char** argv) {
+    if(argc < 3) {
+        fprintf(stderr, "Usage: %s --root <dir> [--db <path>]", argv[0]);
+        return 1;
+    }
 
-    close(fd);
+    char* root = NULL;
+    char* db = "index.db";
+
+    while(argv[1] != NULL) {
+        if(strcmp(argv[1], "--root") == 0) {
+            argv++;
+            if(argv[1] != NULL) {
+                root = argv[1];
+            }
+        }else if(strcmp(argv[1], "--db") == 0) {
+            argv++;
+            if(argv[1] != NULL) {
+                db = argv[1];
+            }
+        }
+        argv++;
+    }
+
+    if(root == NULL) {
+        fprintf(stderr, "Usage: %s --root <dir> [--db <path>]", argv[0]);
+        return 1;
+    }
+
+    db_connection connection = {0};
+    if(!db_open_connection(&connection, db, "IDX", &idx_generate_snapshot)) {
+        printf("[FileIndexer]: %s is already sealed, replacing it...\n", db);
+        ERRCHECK(remove(db), "[FileIndexer]: Could not delete file %s:\n", db);
+
+        db_open_connection(&connection, db, "IDX", &idx_generate_snapshot);
+    }
+
+    printf("size of header: %zu\n", sizeof(db_header));
+    printf("size of row: %zu\n", sizeof(db_indexer_row));
+    printf("size of bname: %zu\n", sizeof(db_indexer_bname));
+    
+    traverse_file_tree(&connection, root); 
+
+    db_close_connection(&connection);
+
     return 0;
 }
 
