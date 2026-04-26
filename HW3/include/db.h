@@ -14,6 +14,7 @@ typedef enum : uint8_t {
     SNAPSHOT_SEALED = 1
 } db_snapshot_state;
 
+constexpr size_t DB_FORMAT_VERSION_OFFSET = DB_SIGNATURE_LEN;
 constexpr size_t DB_WRITERS_OFFSET = DB_SIGNATURE_LEN+sizeof(uint8_t)+sizeof(db_snapshot_state)+sizeof(uint32_t);
 constexpr size_t DB_SNAPSTATE_OFFSET = DB_SIGNATURE_LEN+sizeof(uint8_t)+sizeof(uint32_t);
 constexpr size_t DB_RECORD_COUNT_OFFSET = DB_WRITERS_OFFSET+sizeof(uint8_t);
@@ -41,6 +42,9 @@ typedef struct {
 } db_connection;
 
 int db_tell(db_connection* connection);
+
+uint8_t db_format_version(db_connection* connection);
+void    db_signature(db_connection* connection, char** out);
 
 void db_inc_record_count(db_connection* connection);
 void db_dec_record_count(db_connection* connection);

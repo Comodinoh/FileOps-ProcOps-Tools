@@ -4,6 +4,7 @@
 #include "lock.h"
 
 #include <fcntl.h>
+#include <math.h>
 #include <stdint.h>
 #include <sys/stat.h>
 #include <stdbool.h>
@@ -195,6 +196,48 @@ bool db_dec_writers(db_connection* connection) {
     return true;
 }
 
+uint8_t db_format_version(db_connection* connection) {
+    int fd = connection->fd;
+    
+    int temp = db_tell(connection);
+
+    lseek(fd, DB_FORMAT_VERSION_OFFSET, SEEK_SET); 
+
+    db_lock_read_region_wait(fd, 0, sizeof(uint8_t));
+
+    uint8_t ver;
+    ERRCHECK(read(fd, &ver, sizeof(ver)), "Could not read format version from header from %s\n", connection->filepath);
+
+    lseek(fd, -sizeof(ver), SEEK_CUR);
+
+    db_unlock_region(fd, 0, sizeof(ver));
+
+    lseek(fd, temp, SEEK_SET);
+
+    return ver;
+}
+
+void db_signature(db_connection* connection, char** out) {
+    int fd = connection->fd;
+    
+    int temp = db_tell(connection);
+
+    lseek(fd, 0, SEEK_SET); 
+
+    db_lock_read_region_wait(fd, 0, DB_SIGNATURE_LEN);
+
+    *out = malloc(DB_SIGNATURE_LEN);
+    memset(*out, 0, DB_SIGNATURE_LEN);
+
+    ERRCHECK(read(fd, *out, DB_SIGNATURE_LEN), "Could not read signature from header from %s\n", connection->filepath);
+
+    (*out)[DB_SIGNATURE_LEN-1] = '\0';
+
+    db_unlock_region(fd, -DB_SIGNATURE_LEN, DB_SIGNATURE_LEN);
+
+    lseek(fd, temp, SEEK_SET);
+}
+
 bool db_open_connection(db_connection* connection, const char* filepath, const char* signature,
         db_generate_snapshot_func generate_snapshot) {
     printf("Opening db connection for %s\n", filepath);
@@ -204,16 +247,21 @@ bool db_open_connection(db_connection* connection, const char* filepath, const c
        exists = 0; 
     }
 
-    int fd;
-    ERRCHECK(fd = open(filepath, O_RDWR | O_CREAT, S_IWUSR | S_IRUSR), "Could not open file %s\n", filepath);
-
     connection->filepath = strdup(filepath);
-    connection->fd = fd;
     connection->generate_snapshot = generate_snapshot;
 
     db_header header = {0};
     if(!exists) {
+        if(signature == NULL) {
+            return false;
+        }
+
+        int fd;
+
         printf("%s doesnt exist, creating it and setting up the header...\n", filepath);
+        ERRCHECK(fd = open(filepath, O_RDWR | O_CREAT, S_IWUSR | S_IRUSR), "Could not open file %s\n", filepath);
+
+        connection->fd = fd;
 
         if(db_lock_write_region(fd, 0, sizeof(db_header))) {
             header = (db_header){
@@ -224,17 +272,25 @@ bool db_open_connection(db_connection* connection, const char* filepath, const c
                 .record_count = 0
             };
 
-            memcpy(header.signature, signature, DB_SIGNATURE_LEN);
+            strncpy(header.signature, signature, DB_SIGNATURE_LEN);
             header.signature[DB_SIGNATURE_LEN-1] = '\0';
             
             ERRCHECK(write(fd, &header, sizeof(db_header)), "Could not write header to %s\n", filepath);
             lseek(fd, -sizeof(header), SEEK_CUR);
 
             db_unlock_region(fd, 0, sizeof(header));
+
+            printf("header setup\n");
         }else {
             printf("%s header lock already present. Skipping over...\n", filepath);
         }
     } else {
+        int fd;
+        ERRCHECK(fd = open(filepath, O_RDWR, S_IWUSR | S_IRUSR), "Could not open file %s\n", filepath);
+
+        connection->fd = fd;
+
+        if(signature == NULL) return true;
         if(db_is_sealed(connection)) {
             printf("%s snapshot is already sealed\n", filepath);
             close(fd);
@@ -252,8 +308,11 @@ void db_close_connection(db_connection *connection) {
     if(!db_dec_writers(connection)) {
         db_seal(connection);
 
+
         close(connection->fd);
+        printf("Closed connection to %s and sealed it\n", connection->filepath);
         free(connection->filepath);
+
     }
 }
 
