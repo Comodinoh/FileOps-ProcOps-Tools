@@ -10,9 +10,9 @@
 
 #else
 
-#define ASSERT(x, ...)
-#define ERRCHECK(x, ...)
-#define ERRCHECKNULL(x, ...)
+#define ASSERT(x, ...) (void)(x)
+#define ERRCHECK(x, ...) (void)(x)
+#define ERRCHECKNULL(x, ...)(void)(x)
 
 #endif
 

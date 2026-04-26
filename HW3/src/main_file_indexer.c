@@ -2,6 +2,7 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <errno.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -13,6 +14,53 @@
 
 uint32_t idx_generate_snapshot(const char* path) {
     return time(NULL);
+}
+
+char* abspath(const char* path) {
+    if (!path || !*path) return NULL;
+
+    char base[PATH_MAX];
+    
+    if (path[0] == '/') {
+        base[0] = '\0';
+    } else {
+        if (getcwd(base, sizeof(base)) == NULL) {
+            return NULL;
+        }
+    }
+
+    char full_path[PATH_MAX * 2];
+    snprintf(full_path, sizeof(full_path), "%s/%s", base, path);
+
+    char *stack[PATH_MAX / 2];
+    int top = 0;
+
+    char *token = strtok(full_path, "/");
+    while (token != NULL) {
+        if (strcmp(token, "..") == 0) {
+            if (top > 0) {
+                top--; 
+            }
+        } else if (strlen(token) > 0) {
+            stack[top++] = token;
+        }
+        token = strtok(NULL, "/");
+    }
+
+    char *result = malloc(PATH_MAX);
+    if (!result) return NULL;
+    
+    if (top == 0) {
+        strcpy(result, "/");
+        return result;
+    }
+
+    size_t len = 0;
+    for (int i = 0; i < top; i++) {
+        len += snprintf(result + len, PATH_MAX - len, "/%s", stack[i]);
+    }
+
+    return result;
 }
 
 size_t hash_file(int fd) {
@@ -109,12 +157,13 @@ void traverse_file_tree(db_connection* connection, const char* path) {
 
             struct stat st;
 
-            if(stat(p, &st) == -1) return;
+            if(lstat(p, &st) == -1) return;
+
 
             db_indexer_row row = {0};
             memset(&row, 0, sizeof(row));
 
-            char* str = realpath(p, NULL);
+            char* str = abspath(p);
 
             strncpy(row.absolute_path, str, DB_STRING_LEN);
             row.absolute_path[DB_STRING_LEN-1] = '\0';
@@ -123,15 +172,18 @@ void traverse_file_tree(db_connection* connection, const char* path) {
 
             bool is_dir = false;
 
-            if(S_ISLNK(st.st_mode)) {
+            if((st.st_mode & S_IFMT) == S_IFLNK) {
                 row.symlink = true;
                 char target[DB_STRING_LEN] = {0};
 
                 if(readlink(p, target, DB_STRING_LEN) == -1) {
+                    fprintf(stderr, "[FileIndexer]: Cannot read link %s:\n", row.absolute_path);
+                    perror(NULL);
                     return;
                 }
 
                 memcpy(row.symlink_target, target, DB_STRING_LEN);
+
 
                 row.type = FILE_TYPE_SYM;
             }
@@ -161,7 +213,7 @@ void traverse_file_tree(db_connection* connection, const char* path) {
 
             db_indexer_upsert(connection, &row);
 
-            printf("Upserted %s into %s\n", p, path);
+            // printf("Upserted %s into %s\n", p, path);
 
             if(is_dir) {
                 traverse_file_tree(connection, p);
@@ -178,7 +230,7 @@ int main(int argc, char** argv) {
     }
 
     char* root = NULL;
-    char* db = "index.db";
+    char* db = "./data/index.db";
 
     while(argv[1] != NULL) {
         if(strcmp(argv[1], "--root") == 0) {
@@ -202,19 +254,18 @@ int main(int argc, char** argv) {
 
     db_connection connection = {0};
     if(!db_open_connection(&connection, db, DB_FILE_INDEXER_SIGNATURE, &idx_generate_snapshot)) {
-        printf("[FileIndexer]: %s is already sealed, replacing it...\n", db);
-        ERRCHECK(remove(db), "[FileIndexer]: Could not delete file %s:\n", db);
+        printf("[FileIndexer]: %s is already sealed\n", db);
 
-        db_open_connection(&connection, db, DB_FILE_INDEXER_SIGNATURE, &idx_generate_snapshot);
+        return 2;
     }
 
-    printf("size of header: %zu\n", sizeof(db_header));
-    printf("size of row: %zu\n", sizeof(db_indexer_row));
-    printf("size of bname: %zu\n", sizeof(db_indexer_bname));
+    // printf("size of header: %zu\n", sizeof(db_header));
+    // printf("size of row: %zu\n", sizeof(db_indexer_row));
+    // printf("size of bname: %zu\n", sizeof(db_indexer_bname));
     
     traverse_file_tree(&connection, root); 
 
-    printf("Traversed everything\n");
+    // printf("Traversed everything\n");
 
     db_close_connection(&connection);
 

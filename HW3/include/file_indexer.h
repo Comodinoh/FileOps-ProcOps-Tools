@@ -8,7 +8,7 @@
 #define DB_FILE_INDEXER_SIGNATURE "IDX"
 
 typedef enum {
-    FILE_TYPE_REGULAR,
+    FILE_TYPE_REGULAR = 0,
     FILE_TYPE_DIR,
     FILE_TYPE_SYM,
     FILE_TYPE_FIFO,

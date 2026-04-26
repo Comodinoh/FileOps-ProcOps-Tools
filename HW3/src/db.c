@@ -41,10 +41,7 @@ void db_inc_record_count(db_connection* connection) {
     ERRCHECK(write(fd, &record_count, sizeof(record_count)), "Could not write record_count to header from %s\n", connection->filepath);
 
 
-    lseek(fd, -sizeof(record_count), SEEK_CUR);
-    db_unlock_region(fd, 0, sizeof(record_count));
-
-    printf("Record count incremented to %d!\n", record_count);
+    db_unlock_region(fd, -sizeof(record_count), sizeof(record_count));
 
     lseek(fd, temp, SEEK_SET);
 }
@@ -87,9 +84,7 @@ uint32_t db_record_count(db_connection* connection) {
     uint32_t record_count;
     ERRCHECK(read(fd, &record_count, sizeof(record_count)), "Could not read record count from header from %s\n", connection->filepath);
 
-    lseek(fd, -sizeof(record_count), SEEK_CUR);
-
-    db_unlock_region(fd, 0, sizeof(record_count));
+    db_unlock_region(fd, -sizeof(record_count), sizeof(record_count));
 
     lseek(fd, temp, SEEK_SET);
 
@@ -110,9 +105,8 @@ bool db_is_sealed(db_connection* connection) {
     db_snapshot_state state;
     ERRCHECK(read(fd, &state, sizeof(state)), "Could read snapshot seal from header from %s\n", connection->filepath);
 
-    lseek(fd, -sizeof(state), SEEK_CUR);
 
-    db_unlock_region(fd, 0, sizeof(state));
+    db_unlock_region(fd, -sizeof(state), sizeof(state));
 
     lseek(fd, temp, SEEK_SET);
 
@@ -151,9 +145,7 @@ void db_inc_writers(db_connection* connection) {
 
     ERRCHECK(write(fd, &writers, sizeof(writers)), "Could not write writers to header from %s\n", connection->filepath);
 
-    lseek(fd, -sizeof(writers), SEEK_CUR);
-
-    db_unlock_region(fd, 0, sizeof(writers));
+    db_unlock_region(fd, -sizeof(writers), sizeof(writers));
 
     lseek(fd, temp, SEEK_SET);
 }
@@ -171,8 +163,8 @@ bool db_dec_writers(db_connection* connection) {
     lseek(fd, -sizeof(writers), SEEK_CUR);
 
     if(writers == 0) {
-        return false; 
         db_unlock_region(fd, 0, sizeof(writers));
+        return false; 
     }
     
     writers--;
@@ -263,7 +255,7 @@ bool db_open_connection(db_connection* connection, const char* filepath, const c
 
         connection->fd = fd;
 
-        if(db_lock_write_region(fd, 0, sizeof(db_header))) {
+        // if(db_lock_write_region(fd, 0, sizeof(db_header))) {
             header = (db_header){
                 .format_version = FORMAT_VERSION,
                 .snapshot_id = generate_snapshot(filepath),
@@ -276,29 +268,23 @@ bool db_open_connection(db_connection* connection, const char* filepath, const c
             header.signature[DB_SIGNATURE_LEN-1] = '\0';
             
             ERRCHECK(write(fd, &header, sizeof(db_header)), "Could not write header to %s\n", filepath);
-            lseek(fd, -sizeof(header), SEEK_CUR);
 
-            db_unlock_region(fd, 0, sizeof(header));
+            // db_unlock_region(fd, 0, sizeof(header));
+            return true;
+        // }
+    } 
+    int fd;
+    ERRCHECK(fd = open(filepath, O_RDWR, S_IWUSR | S_IRUSR), "Could not open file %s\n", filepath);
 
-            printf("header setup\n");
-        }else {
-            printf("%s header lock already present. Skipping over...\n", filepath);
-        }
-    } else {
-        int fd;
-        ERRCHECK(fd = open(filepath, O_RDWR, S_IWUSR | S_IRUSR), "Could not open file %s\n", filepath);
+    connection->fd = fd;
 
-        connection->fd = fd;
-
-        if(signature == NULL) return true;
-        if(db_is_sealed(connection)) {
-            printf("%s snapshot is already sealed\n", filepath);
-            close(fd);
-            return false;
-        }
-        db_inc_writers(connection);
-        printf("Connected to %s and incremented writers\n", filepath);
+    if(signature == NULL) return true;
+    if(db_is_sealed(connection)) {
+        close(fd);
+        return false;
     }
+    db_inc_writers(connection);
+    printf("Connected to %s and incremented writers\n", filepath);
 
 
     return true;

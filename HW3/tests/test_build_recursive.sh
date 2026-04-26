@@ -17,7 +17,7 @@ echo "  printf(\"%d\", util_add(2, 3));" >> ./tmp/test_scenario_src/app/main_dem
 echo "  return 0;" >> ./tmp/test_scenario_src/app/main_demo.c
 echo "}" >> ./tmp/test_scenario_src/app/main_demo.c
 
-CFLAGS="-Itmp/test_scenario_src/lib/include -std=c11 -Wall -Wextra -Werror" ./tools/fileops.sh build --src tmp/test_scenario_src
+CFLAGS="-Itmp/test_scenario_src/lib/include -std=c11 -Wall -Wextra -Werror" ./tools/fileops.sh build --src tmp/test_scenario_src --silent
 
 if [ ! -x ./bin/demo ]; then
     exit 1

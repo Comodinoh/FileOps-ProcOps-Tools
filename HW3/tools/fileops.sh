@@ -280,7 +280,7 @@ case $subcmd in
         process_options "$@"
 
         log_cmd rm -rf ./bin/*
-        log_cmd rm -rf ./tmp/obj
+        log_cmd rm -rf ./tmp/*
     ;;
     "help")
         shift 1

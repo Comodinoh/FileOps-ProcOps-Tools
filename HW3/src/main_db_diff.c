@@ -11,10 +11,9 @@
 uint32_t read_all_records_idx(db_connection* connection, db_indexer_row** out) {
     uint32_t rec_count = db_record_count(connection);
 
-    *out = malloc(sizeof(db_indexer_row)*rec_count);
+    (*out) = malloc(sizeof(db_indexer_row)*rec_count);
     
     lseek(connection->fd, sizeof(db_header), SEEK_SET);
-
 
     ERRCHECK(read(connection->fd, *out, sizeof(db_indexer_row)*rec_count), "[DBDiff]: Could not read all of the rows from %s into memory\n", connection->filepath);
 
@@ -49,7 +48,7 @@ const char* idx_type_to_string(db_indexer_ftype type) {
 }
 
 int idx_row_compare(const void* r1, const void* r2) {
-    return strcmp(((db_indexer_row*)r1)->absolute_path, ((db_indexer_row*)r2)->absolute_path);
+    return strcmp(((const db_indexer_row*)r1)->absolute_path, ((const db_indexer_row*)r2)->absolute_path);
 }
 
 void generate_diffs_and_store_idx(db_connection* old, db_connection* new, int outfd, const char* signature) {
@@ -58,16 +57,18 @@ void generate_diffs_and_store_idx(db_connection* old, db_connection* new, int ou
     uint32_t old_count = read_all_records_idx(old, &old_rows); 
     uint32_t new_count = read_all_records_idx(new, &new_rows);
 
-    qsort(old_rows, old_count, sizeof(db_indexer_row), idx_row_compare);
-    qsort(new_rows, new_count, sizeof(db_indexer_row), idx_row_compare);
+
+    qsort(old_rows, old_count, sizeof(db_indexer_row), &idx_row_compare);
+    qsort(new_rows, new_count, sizeof(db_indexer_row), &idx_row_compare);
 
     // I dont wanna hear any complaints
     FILE* f = fdopen(outfd, "w");
 
-    size_t i = 0, j = 0;
+    size_t i = 0;
+    size_t j = 0;
     while(i < old_count && j < new_count) {
         db_indexer_row* r1 = &old_rows[i];
-        db_indexer_row* r2 = &new_rows[i];
+        db_indexer_row* r2 = &new_rows[j];
         int com = idx_row_compare(r1, r2);
 
         if(com == 0) {
@@ -98,7 +99,7 @@ void generate_diffs_and_store_idx(db_connection* old, db_connection* new, int ou
 
             i++;
             j++;
-        } else if(com == -1) {
+        } else if(com < 0) {
             fprintf(f, "DISAPPEARED %s\n", r1->absolute_path);
             i++;
         } else {
