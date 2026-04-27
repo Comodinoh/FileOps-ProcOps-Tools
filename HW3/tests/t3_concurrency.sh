@@ -29,6 +29,31 @@ if [ "$STATE" != "1" ]; then
     exit 1
 fi
 
+rm -f ./tmp/procs.db
+
+if [ ! -x ./bin/procs ]; then
+    exit 1
+fi
+
+./tools/fileops.sh run -- procs --db ./tmp/procs.db --root . 1> /dev/null & ./tools/fileops.sh run -- procs ---db ./tmp/procs.db --root . 1> /dev/null & ./tools/fileops.sh run -- procs --db ./tmp/procs.db --root . 1> /dev/null&
+wait
+
+if [ ! -f ./tmp/procs.db ]; then
+    exit 1
+fi
+
+SIG=$(hexdump -n 32 -e '1/32 "%s"' ./tmp/procs.db)
+
+if [ "$SIG" != "PROC" ]; then
+    exit 1
+fi
+
+STATE=$(hexdump -s 37 -n 1 -e '1/1 "%d"' ./tmp/procs.db)
+
+if [ "$STATE" != "1" ]; then
+    exit 1
+fi
+
 rm -f ./tmp/index1.db
 rm -f ./tmp/index2.db
 
