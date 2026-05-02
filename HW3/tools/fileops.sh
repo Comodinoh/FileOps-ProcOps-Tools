@@ -66,7 +66,7 @@ function build() {
 
     SRC_NAME=${SRC_FILE##*/}
     if [ "${SRC_NAME%%_*}" = "main" ]; then
-        if [ -z $EXECUTABLES ]; then
+        if [ -z "$EXECUTABLES" ]; then
             EXECUTABLES=${OBJ_FILE}
         else
             EXECUTABLES="${EXECUTABLES} ${OBJ_FILE}"

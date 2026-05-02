@@ -10,7 +10,6 @@ typedef struct  __attribute__((packed)){
     pid_t pid; 
     pid_t ppid; 
 
-
     char state[4];
     char comm[16];
     char cmdline[PATH_MAX/256];

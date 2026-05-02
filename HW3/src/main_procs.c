@@ -34,7 +34,7 @@ void db_procs_upsert(db_connection* connection, db_procs_row* row) {
 
             lseek(fd, -sizeof(db_procs_row), SEEK_CUR);
 
-            ERRCHECK(write(fd, row, sizeof(db_procs_row)), "[Fileprocs] UPSERT: Could not overwrite row %zu for %s\n", i, connection->filepath);
+            ERRCHECK(write(fd, row, sizeof(db_procs_row)), "[Procs] UPSERT: Could not overwrite row %zu for %s\n", i, connection->filepath);
 
 
             db_unlock_region(fd, -sizeof(db_procs_row), sizeof(db_procs_row));
@@ -80,8 +80,6 @@ void traverse_procs(db_connection* connection) {
         snprintf(p, PATH_MAX, "/proc/%s/stat", proc->d_name);
         
         if((fd = open(p,O_RDONLY)) == -1) {
-            fprintf(stderr, "[Procs] Could not open stat file for proc %s\n", proc->d_name);
-            perror(NULL);
             continue;
         }
 
