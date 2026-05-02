@@ -37,7 +37,18 @@ Note: `DB_STRING_LEN` constexpr is defined as `1024`.
 | st_dev            | `uint32_t`                        | device number of the file |
 
 ### Procs
-**TBD**
+Each entry in the procs database has a fixed size and is packed without padding.
+
+|   Field           | Type                              | Description |
+|-------------------|-----------------------------------|-------------|
+| pid   | `pid_t`     | Process ID        |
+| ppid  | `pid_t`    | Parent Process ID |
+| state | `char[4]` | Process state (`R` - Running, `X` - Dead, `T` - Stopped, `S` - Asleep waiting, etc.) |
+| comm | `char[16]` | Filename of the executable truncated to 16 characters and without parens |
+| cmdline | `char[PATH_MAX/256]` | Command-line used to start the process truncated to 16 characters |
+| rss | `uint64_t`  | Resident Set Size, the pages the process has in real memory in Kilobytes |
+| rss_source | `char[8]` | Source from which the rss value has been fetched (`/stat` in the case of the main_procs.c implementation)|
+| cpu_time | `uint64_t` | user time (ticks) + kernel time (ticks) / ticks per second = total time taken by the process in seconds |
 ## Hashing
 Hashing of regular file contents is done through a simple algorithm.
 
@@ -66,18 +77,17 @@ This diff utility first loads all records of both dbs into memory. sorts them us
 
 **Sorting:** Records are sorted in ascending alphabetical order (A-Z) using `qsort`
 - For files, `idx_row_compare` uses `strcmp` on the `absolute_path`
-- For processes, sorting is done numerically by `pid`
+- For processes, `procs_row_compare` subtracts the two pids to get a comparable value
 
 **Merging:**
 - If the old record comes before the new record, the old record is missing from the new database and is marked as **DISAPPEARED**.
 - If the new record comes before the old record, it is a new addition and is marked as **APPEARED**.
-- If the keys match, the fields are compared.
-
-**Modifications:**
-
-For file databases, a matched record is marked as `MODIFIED` if any of the following differ:    
-- Type (`type`)
-- Size (`size`)
-- Modification time (`last_modification`)
-- Hash (`hash`)
-- Symlink target (`symlink_target` via `strcmp`)
+- If the keys match, the fields are compared based on the following criteria for each type of db:
+    - For file databases, a matched record is marked as `MODIFIED` if any of the following differ:    
+        - Type (`type`)
+        - Size (`size`)
+        - Modification time (`last_modification`)
+        - Hash (`hash`)
+        - Symlink target (`symlink_target` via `strcmp`)
+    - For procs databases, a matched record is marked as `SIGNIFICANTLY CHANGED` if any of the following differ in the following manner:
+        - RSS1 (`rss`) - RSS2 (`rss`) >= `DB_PROCS_RSS_THRESHOLD` (the chosen thresold in this case is 512KB a.k.a. 0.5MB)
