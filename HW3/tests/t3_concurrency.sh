@@ -134,6 +134,14 @@ ln -s mars.txt tmp/tree/kbitty.txt
 
 ./tools/fileops.sh run -- db_diff --old tmp/index1.db --new tmp/index2.db --out reports/T3_filediff.txt 1> /dev/null
 
+rm -f ./tmp/procs1.db
+rm -f ./tmp/procs2.db
+
+./bin/procs --db tmp/procs1.db
+sleep 10 & (sleep 2 && ./bin/procs --db tmp/procs2.db) & wait
+
+./bin/db_diff --old tmp/procs1.db --new tmp/procs2.db --out reports/T3_procdiff.txt 1> /dev/null
+
 exit 0
 
 
