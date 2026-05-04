@@ -1,0 +1,11 @@
+MODIFIED /home/como/Work/FileOps-ProcOps-Tools/HW4/tmp/tree/glorp.txt
+  SIZE 1494B -> 5575B
+  HASH 14134117888266711469 -> 13507445004391678958
+MODIFIED /home/como/Work/FileOps-ProcOps-Tools/HW4/tmp/tree/kbitty.txt
+  SYMLINK_TARGET glorp.txt -> mars.txt
+MODIFIED /home/como/Work/FileOps-ProcOps-Tools/HW4/tmp/tree/mars.txt
+  SIZE 37B -> 20B
+  HASH 9012538862060367188 -> 1598012445517496127
+MODIFIED /home/como/Work/FileOps-ProcOps-Tools/HW4/tmp/tree/t.txt
+  SIZE 14B -> 46B
+  HASH 10394446050872185944 -> 12004959141075182763
