@@ -8,26 +8,28 @@
 #include <semaphore.h>
 #include <sys/types.h>
 
-#define QUEUE_LEN 16
+#define QUEUE_JOB_LEN 16
+#define QUEUE_CHANNEL_LEN 4
 #define PACKED __attribute__((packed))
 
-typedef struct PACKED{
+typedef struct {
     char    signature[DB_STRING_LEN];
 
-    u32     jobs_running;
-    u8      jobs_waiting;
     sem_t   job_sem;
+    u8      jobs_running;
+    u8      jobs_waiting;
 
     u8      queue_head;
     u8      queue_tail;
-    sem_t   queue_sem;
 
     u8      version;
 
     //TODO: add worker stats
 } ipc_header;
 
-typedef struct PACKED{
+typedef char ipc_job[DB_STRING_LEN];
+
+typedef struct {
     char    absolute_path[DB_STRING_LEN];
     u32     size;
     u32     last_modification;
@@ -37,9 +39,9 @@ typedef struct PACKED{
     u64     hash;
 } ipc_result_record;
 
-typedef struct PACKED{
+typedef struct {
     sem_t               sem;
-    ipc_result_record   record;
+    ipc_result_record   record[QUEUE_CHANNEL_LEN];
 } ipc_result_channel;
 
 typedef struct {
@@ -48,7 +50,7 @@ typedef struct {
 } ipc_conn;
 
 
-void manager_init(ipc_conn* conn, const char* ipc_path);
+void manager_init(ipc_conn* conn, const char* ipc_path, usz N);
 void manager_quit(ipc_conn *conn);
 
 #endif

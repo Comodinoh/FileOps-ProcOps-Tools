@@ -16,4 +16,6 @@ typedef int64_t  i64;
 typedef size_t   usz;
 typedef ssize_t  ssz;
 
+typedef unsigned long long ull;
+
 #endif
