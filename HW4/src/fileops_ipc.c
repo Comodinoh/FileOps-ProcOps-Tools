@@ -90,6 +90,7 @@ void manager_collect(ipc_conn* conn, ipc_header* header) {
             }else  {
                 fprintf(stderr, "[FileopsManager]: ERROR: Could not wait for job semaphore\n");
                 perror(NULL);
+                return;
             }
         }
         if(header->jobs_waiting == 0 && header->jobs_running == 0 && nothing) { 
