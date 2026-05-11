@@ -1,7 +1,9 @@
 #ifndef __UTIL_H
 #define __UTIL_H
 
+#include "types.h"
 #include <stdio.h>
+
 #ifndef NDEBUG
 
 #define ASSERT(x, ...) do { if(!(x)) {fprintf(stderr, __VA_ARGS__);} } while(0)
@@ -15,6 +17,7 @@
 #define ERRCHECKNULL(x, ...)(void)(x)
 
 #endif
+
 
 
 #endif

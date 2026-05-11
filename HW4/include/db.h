@@ -7,7 +7,7 @@
 #include <stdio.h>
 
 constexpr size_t DB_SIGNATURE_LEN = 32;
-constexpr size_t DB_STRING_LEN = 1024;
+constexpr size_t DB_STRING_LEN = 256;
 
 typedef enum : uint8_t {
     SNAPSHOT_OPEN = 0,
