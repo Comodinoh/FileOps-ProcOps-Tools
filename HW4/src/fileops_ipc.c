@@ -58,7 +58,6 @@ int manager_init(ipc_conn* conn, const char* root, const char* ipc_path, usz wor
 
 void manager_collect(ipc_conn* conn, ipc_header* header) {
     while(1) {
-
         bool nothing = true;
         ipc_job* queue = (void*)&header[1];
         ipc_result_channel* channels = (void*)&queue[QUEUE_JOB_LEN];
@@ -71,14 +70,20 @@ void manager_collect(ipc_conn* conn, ipc_header* header) {
                     return;
                 }
             }
-            nothing = false;
             ERRCHECK(sem_wait(&channels[i].sem), "[FileopsManger]: ERROR: Could not wait for channel %zu semaphore\n", i);
-
             ipc_result_channel* chan = &channels[i];
-            ipc_result_record* record = &chan->records[chan->records_tail];
-            chan->records_tail = (chan->records_tail + 1 ) % QUEUE_CHANNEL_LEN;
 
-            // printf("[FileopsManger]: INFO: record %s\n", record->absolute_path);
+            if(!chan->done) {
+
+                ipc_result_record* record = &chan->records[chan->records_tail];
+                chan->records_tail = (chan->records_tail + 1 ) % QUEUE_CHANNEL_LEN;
+
+                nothing = nothing && false;
+
+                // printf("[FileopsManger]: INFO: record %s\n", record->absolute_path);
+            } else {
+                nothing = nothing && true;
+            }
 
             ERRCHECK(sem_post(&channels[i].sem), "[FileopsManger]: ERROR: Could not post channel %zu semaphore\n", i);
             ERRCHECK(sem_post(&channels[i].write_sem), "[FileopsManger]: ERROR: Could not post write channel %zu write semaphore\n", i);
@@ -128,9 +133,7 @@ void manager_collect_and_wait(ipc_conn* conn) {
 
     manager_collect(conn, header);
 
-    int val;
-    sem_getvalue(&header->workers_sem, &val);
-    for(usz i = 0; i < conn->workers-val; i++ )  {
+    for(usz i = 0; i < conn->workers; i++ )  {
         pid_t pid;
         int stat;
         ERRCHECK(pid = wait(&stat), "[FileopsManager]: ERROR: Could not wait for kid to die\n");

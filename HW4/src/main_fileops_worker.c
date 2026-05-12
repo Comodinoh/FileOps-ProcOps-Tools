@@ -33,7 +33,7 @@ bool stack_at_end() {
     return global_job_head == 0;
 }
 
-void stack_pop_job(ipc_job* restrict job) {
+void stack_pop_job(ipc_job* job) {
     memcpy(job->path, &global_job_stack[global_job_head].path, DB_STRING_LEN);
     job->depth = global_job_stack[global_job_head].depth;
     global_job_head--;
@@ -151,7 +151,7 @@ int main(int argc, char** argv) {
 
     usz map_size = MAP_JOB_SIZE+sizeof(ipc_result_channel)*workers_num;
 
-    global_job_capacity = 32;
+    global_job_capacity = 1024*1024;
     global_job_stack = malloc(sizeof(ipc_job)*global_job_capacity);
 
     void* map = mmap(NULL, map_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
@@ -171,19 +171,11 @@ int main(int argc, char** argv) {
 
     while(1) {
 
-        if(header->quitting && stack_at_end()) {
-            sem_post(&header->queue_read_sem);
-            goto cleanup;
-        }
-
         ERRCHECK(sem_wait(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not wait for job semaphore\n", id);
         if(header->jobs_waiting == 0 && header->jobs_running == 0 && stack_at_end()) {
             printf("[FileopsWorker %llu] INFO: My job here is done\n", id);
             ERRCHECK(sem_post(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not post job semaphore\n", id);
             sem_post(&header->queue_read_sem);
-            sem_wait(&header->quit_sem);
-            header->quitting = true;
-            sem_post(&header->quit_sem);
             goto cleanup; // :)
         }
 
@@ -197,9 +189,6 @@ int main(int argc, char** argv) {
             printf("[FileopsWorker %llu] INFO: My job here is done\n", id);
             ERRCHECK(sem_post(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not post job semaphore\n", id);
             sem_post(&header->queue_read_sem);
-            sem_wait(&header->quit_sem);
-            header->quitting = true;
-            sem_post(&header->quit_sem);
             goto cleanup; // :)
         }
         ERRCHECK(sem_post(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not post job semaphore\n", id);
@@ -221,7 +210,7 @@ int main(int argc, char** argv) {
             header->jobs_running++;
             header->jobs_waiting--;
 
-            printf("[FileopsWorker %llu]: INFO: Took on job %s\n",  id, job.path);
+            // printf("[FileopsWorker %llu]: INFO: Took on job %s\n",  id, job.path);
 
             ERRCHECK(sem_post(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not post job semaphore\n", id);
             sem_post(&header->queue_write_sem);
@@ -295,7 +284,7 @@ int main(int argc, char** argv) {
                         header->jobs_waiting++;
                         ERRCHECK(sem_post(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not post job semaphore\n", id);
                         ERRCHECK(sem_post(&header->queue_read_sem), "[FileopsWorker %llu]: ERROR: Could not post queue read semaphore\n", id);
-                        printf("[FileopsWorker %llu]: INFO: Registered new internal job %s\n", id, p);
+                        // printf("[FileopsWorker %llu]: INFO: Registered new internal job %s\n", id, p);
                     }else {
                         fprintf(stderr, "ERROR\n");
                         perror(0);
@@ -326,7 +315,7 @@ int main(int argc, char** argv) {
 
         ERRCHECK(sem_wait(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not wait for job semaphore\n", id);
         header->jobs_running--;
-        // printf("[FileopsWorker %llu]: INFO: %d waiting and %d running\n", id, header->jobs_waiting, header->jobs_running);
+        printf("[FileopsWorker %llu]: INFO: %d waiting and %d running and %zu stacked\n", id, header->jobs_waiting, header->jobs_running, global_job_head);
         ERRCHECK(sem_post(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not post job semaphore\n", id);
     }
 
@@ -334,6 +323,13 @@ int main(int argc, char** argv) {
 
 cleanup:
 
+    ipc_result_channel* channels = (void*)&job_queue[QUEUE_JOB_LEN];
+    ipc_result_channel* chan = &channels[id];
+    ERRCHECK(sem_wait(&chan->sem), "[FileopsWorker %llu]: ERROR: Could not wait for result channel semaphore", id);
+
+    chan->done = true;
+
+    ERRCHECK(sem_post(&chan->sem), "[FileopsWorker %llu]: ERROR: Could not post result channel semaphore", id);
     ERRCHECK(sem_post(&header->workers_sem), "[FileopsWorker %llu]: ERROR: Could not post workers semaphore\n", id);
     ERRCHECK(munmap(map, map_size), "[FileopsWorker %llu]: ERROR: Could not unmap ipc\n", id);
 

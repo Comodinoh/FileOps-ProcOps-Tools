@@ -16,8 +16,8 @@ typedef struct {
     char    signature[DB_STRING_LEN];
 
     sem_t   job_sem;
-    u8      jobs_running;
-    u8      jobs_waiting;
+    u32      jobs_running;
+    u32      jobs_waiting;
 
     sem_t   queue_sem;
     sem_t   queue_write_sem;
@@ -57,6 +57,7 @@ typedef struct {
     sem_t               read_sem;
     u32                 records_head;
     u32                 records_tail;
+    bool                done;
     ipc_result_record   records[QUEUE_CHANNEL_LEN];
 } ipc_result_channel;
 
