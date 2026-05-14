@@ -50,6 +50,7 @@ int main(int argc, char** argv) {
 
     ipc_mode mode = IPC_NONE;
     ipc_db_action action = IPC_ACTION_NONE;
+    usz max_depth = (usz)-1;
 
     while(argv[1] != NULL) {
         if(strcmp(argv[1], "--root") == 0) {
@@ -81,6 +82,11 @@ int main(int argc, char** argv) {
             argv++;
             mode = IPC_DB;
             action = IPC_ACTION_VERIFY;
+        }else if(strcmp(argv[1], "--max-depth") == 0) {
+            argv++;
+            if(argv[1] != NULL) {
+                max_depth = strtoull(argv[1], NULL, 10);
+            }
         }
         argv++;
     }
@@ -180,7 +186,7 @@ int main(int argc, char** argv) {
     ipc_conn conn = {0};
 
     int status;
-    if((status = manager_init(&conn, root, ipc_path, db_path, workers_num)) !=  0) {
+    if((status = manager_init(&conn, root, ipc_path, db_path, workers_num, max_depth)) !=  0) {
         fprintf(stderr, "[FileopsManager]: ERROR: Could not initialize manager\n");
         return status;
     }

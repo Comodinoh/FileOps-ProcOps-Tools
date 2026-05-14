@@ -12,7 +12,7 @@
 #include <sys/mman.h>
 #include <errno.h>
 
-int manager_init(ipc_conn* conn, const char* root, const char* ipc_path, const char* db_path, usz workers) {
+int manager_init(ipc_conn* conn, const char* root, const char* ipc_path, const char* db_path, usz workers, usz max_depth) {
 
     snprintf(conn->temp_path, PATH_MAX, "%s.temp", db_path);
     snprintf(conn->og_path, PATH_MAX, "%s", db_path);
@@ -49,11 +49,14 @@ int manager_init(ipc_conn* conn, const char* root, const char* ipc_path, const c
     ERRCHECK(sem_init(&header->workers_sem, 1, 0), "[FileopsManager]: ERROR: Could not initialize quit semaphore\n");
     header->quitting = false;
 
+    header->max_depth = max_depth;
+
 
     ipc_job* job_queue = (ipc_job*)(&header[1]);
 
     strncpy(job_queue[header->queue_head++].path, root, DB_STRING_LEN);
     job_queue[header->queue_head-1].path[DB_STRING_LEN-1] = '\0';
+    job_queue[header->queue_head-1].depth = 0;
 
     header->jobs_waiting++;
 

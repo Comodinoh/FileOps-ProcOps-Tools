@@ -214,6 +214,7 @@ int main(int argc, char** argv) {
                 continue;
             }
             memcpy(job.path, job_queue[header->queue_tail].path, DB_STRING_LEN);
+            job.depth = job_queue[header->queue_tail].depth;
             header->queue_tail = (header->queue_tail + 1) % QUEUE_JOB_LEN;
 
 
@@ -225,7 +226,6 @@ int main(int argc, char** argv) {
             ERRCHECK(sem_post(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not post job semaphore\n", id);
             sem_post(&header->queue_write_sem);
         }
-
 
         DIR* dir = opendir(job.path);
 
@@ -265,6 +265,7 @@ int main(int argc, char** argv) {
                 hash_file(fd, rec->hash);
                 close(fd);
 
+
                 char* abp = abspath(p);
                 snprintf(rec->absolute_path, DB_STRING_LEN, "%s", abp);
                 free(abp);
@@ -286,9 +287,10 @@ int main(int argc, char** argv) {
             }
             if(S_ISDIR(mode)) {
                 // printf("[FileopsWorker %llu]: INFO: Discovered new job %s\n", id, p);
-                ipc_job njob;
+                ipc_job njob = {0};
                 snprintf(njob.path, DB_STRING_LEN, "%s", p);
                 njob.depth = job.depth+1;
+                if(njob.depth > header->max_depth) continue;
                 if(sem_trywait(&header->queue_write_sem) == -1) {
                     if(errno == EAGAIN) {
                         stack_push_job(&njob);

@@ -17,9 +17,11 @@
 typedef struct {
     char    signature[DB_STRING_LEN];
 
-    sem_t   job_sem;
-    u32      jobs_running;
-    u32      jobs_waiting;
+    usz max_depth;
+
+    sem_t       job_sem;
+    u32         jobs_running;
+    u32         jobs_waiting;
 
     sem_t   queue_sem;
     sem_t   queue_write_sem;
@@ -33,8 +35,6 @@ typedef struct {
     bool    quitting;
 
     sem_t   workers_sem;
-
-    //TODO: add worker stats
 } ipc_header;
 
 typedef struct {
@@ -57,12 +57,12 @@ typedef struct {
     uint32_t worker_id;
     pid_t pid;
     int exit_status;
-    uint32_t jobs_processed;
-    uint32_t files_emitted;
-    uint64_t bytes_emitted;
-    uint64_t real_time_ms;
-    uint64_t user_cpu_us;
-    uint64_t sys_cpu_us;
+    u32 jobs_processed;
+    u32 files_emitted;
+    u64 bytes_emitted;
+    u64 real_time_ms;
+    u64 user_cpu_us;
+    u64 sys_cpu_us;
 } ipc_stats;
 
 typedef struct {
@@ -112,7 +112,7 @@ typedef enum {
 
 constexpr usz MAP_JOB_SIZE = sizeof(ipc_header)+sizeof(ipc_job)*QUEUE_JOB_LEN;
 
-int manager_init(ipc_conn* conn, const char* root, const char* ipc_path, const char* db_path, usz workers);
+int manager_init(ipc_conn* conn, const char* root, const char* ipc_path, const char* db_path, usz workers, usz max_depth);
 void manager_collect_and_wait(ipc_conn* conn);
 void manager_quit(ipc_conn *conn);
 
