@@ -2,7 +2,7 @@
 
 ./tools/fileops.sh clean --silent
 
-CFLAGS="-Iinclude --std=gnu23 -Wall " ./tools/fileops.sh build --src=src --silent
+CFLAGS="-Iinclude --std=gnu23 -lcrypto" ./tools/fileops.sh build --src=src --silent
 
 rm -f ./tmp/index.db
 
@@ -10,7 +10,7 @@ if [ ! -x ./bin/file_indexer ]; then
     exit 1
 fi
 
-../tools/fileops.sh run -- file_indexer --db ./tmp/index.db --root . 1> /dev/null & ./tools/fileops.sh run -- file_indexer ---db ./tmp/index.db --root . 1> /dev/null & ./tools/fileops.sh run -- file_indexer --db ./tmp/index.db --root . 1> /dev/null&
+./tools/fileops.sh run -- file_indexer --db ./tmp/index.db --root . 1> /dev/null & ./tools/fileops.sh run -- file_indexer ---db ./tmp/index.db --root . 1> /dev/null & ./tools/fileops.sh run -- file_indexer --db ./tmp/index.db --root . 1> /dev/null&
 wait
 
 if [ ! -f ./tmp/index.db ]; then

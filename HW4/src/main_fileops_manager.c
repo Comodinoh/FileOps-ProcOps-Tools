@@ -77,6 +77,10 @@ int main(int argc, char** argv) {
             argv++;
             mode = IPC_DB;
             action = IPC_ACTION_DUMP;
+        }else if(strcmp(argv[1], "--verify") == 0) {
+            argv++;
+            mode = IPC_DB;
+            action = IPC_ACTION_VERIFY;
         }
         argv++;
     }
@@ -115,30 +119,49 @@ int main(int argc, char** argv) {
             perror(NULL);
             return 2;
         }
+        if(action == IPC_ACTION_DUMP) {
+            printf("Database Header:\n");
+            printf("  Signature: %s\n", db_header->sig);
+            printf("  Version: %d\n", db_header->format);
+            printf("  Complete: %d\n", db_header->complete);
+            printf("  File Records: %d\n", db_header->file_records);
+            printf("  Workers: %d\n", db_header->workers);
 
-        printf("Database Header:\n");
-        printf("  Signature: %s\n", db_header->sig);
-        printf("  Version: %d\n", db_header->format);
-        printf("  Complete: %d\n", db_header->complete);
-        printf("  File Records: %d\n", db_header->file_records);
-        printf("  Workers: %d\n", db_header->workers);
+            lseek(fd, sizeof(ipc_db_header)+sizeof(ipc_result_record)*db_header->file_records, SEEK_SET);
 
-        lseek(fd, sizeof(ipc_db_header)+sizeof(ipc_result_record)*db_header->file_records, SEEK_SET);
+            ipc_stats stats;
+            for(usz i = 0; i < db_header->workers; i++) {
+                read(fd, &stats, sizeof(ipc_stats));
 
-        ipc_stats stats;
-        for(usz i = 0; i < db_header->workers; i++) {
-            read(fd, &stats, sizeof(ipc_stats));
+                printf("Worker no. %d Statistics:\n", stats.worker_id);
+                printf("  PID: %d\n", stats.pid);
+                printf("  Exit Status: %d\n", stats.exit_status);
+                printf("  Jobs Processed: %d\n", stats.jobs_processed);
+                printf("  Files Emitted: %d\n", stats.files_emitted);
+                printf("  Bytes Emitted: %zu\n", stats.bytes_emitted);
+                printf("  Real Time MS: %zu\n", stats.real_time_ms);
+                printf("  User Time MS: %zu\n", stats.user_cpu_us);
+                printf("  Sys  Time MS: %zu\n", stats.sys_cpu_us);
+                printf("\n");
+            }
+        }else {
+            if(db_header->format != 1) {
+                fprintf(stderr, "Invalid format version\n");
+                return 1;
+            }
 
-            printf("Worker no. %d Statistics:\n", stats.worker_id);
-            printf("  PID: %d\n", stats.pid);
-            printf("  Exit Status: %d\n", stats.exit_status);
-            printf("  Jobs Processed: %d\n", stats.jobs_processed);
-            printf("  Files Emitted: %d\n", stats.files_emitted);
-            printf("  Bytes Emitted: %zu\n", stats.bytes_emitted);
-            printf("  Real Time MS: %zu\n", stats.real_time_ms);
-            printf("  User Time MS: %zu\n", stats.user_cpu_us);
-            printf("  Sys  Time MS: %zu\n", stats.sys_cpu_us);
-            printf("\n");
+            if(db_header->complete == 0) {
+                fprintf(stderr, "DB is incomplete\n");
+                return 1;
+            }
+            if(strcmp(db_header->sig, "INV") != 0) {
+                fprintf(stderr, "Invalid DB signature\n");
+                return 1;
+            }
+
+            printf("Approved!\n");
+
+            return 0;
         }
 
 
