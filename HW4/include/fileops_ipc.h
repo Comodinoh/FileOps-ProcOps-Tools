@@ -4,8 +4,10 @@
 #include "db.h"
 #include "types.h"
 
+#include <linux/limits.h>
 #include <stdint.h>
 #include <semaphore.h>
+#include <stdio.h>
 #include <sys/types.h>
 
 #define QUEUE_JOB_LEN 1024
@@ -52,29 +54,68 @@ typedef struct {
 } ipc_result_record;
 
 typedef struct {
+    uint32_t worker_id;
+    pid_t pid;
+    int exit_status;
+    uint32_t jobs_processed;
+    uint32_t files_emitted;
+    uint64_t bytes_emitted;
+    uint64_t real_time_ms;
+    uint64_t user_cpu_us;
+    uint64_t sys_cpu_us;
+} ipc_stats;
+
+typedef struct {
     sem_t               sem;
     sem_t               write_sem;
     sem_t               read_sem;
     u32                 records_head;
     u32                 records_tail;
     bool                done;
+    ipc_stats           stats;
     ipc_result_record   records[QUEUE_CHANNEL_LEN];
 } ipc_result_channel;
 
 typedef struct {
-    void*       map;
-    ipc_header* header;
-    ipc_job*    queue;
-    usz         out_channels;
-    usz         workers;
-    usz         map_size;
+    char    sig[DB_SIGNATURE_LEN];
+    u32     format;
+    u8      complete;
+    u32     file_records;
+    u32     workers;
+} ipc_db_header;
+
+typedef struct {
+    void*           map;
+    ipc_header*     header;
+    ipc_job*        queue;
+    char            temp_path[PATH_MAX];
+    char            og_path[PATH_MAX];
+    usz             out_channels;
+    usz             workers;
+    usz             map_size;
+    ipc_db_header*  db_header;
+    FILE*           db;
 } ipc_conn;
+
+typedef enum {
+    IPC_NONE = 0,
+    IPC_INV,
+    IPC_DB
+} ipc_mode;
+
+typedef enum {
+    IPC_ACTION_NONE = 0,
+    IPC_ACTION_DUMP,
+    IPC_ACTION_VERIFY
+} ipc_db_action;
 
 
 constexpr usz MAP_JOB_SIZE = sizeof(ipc_header)+sizeof(ipc_job)*QUEUE_JOB_LEN;
 
-int manager_init(ipc_conn* conn, const char* root, const char* ipc_path, usz workers);
+int manager_init(ipc_conn* conn, const char* root, const char* ipc_path, const char* db_path, usz workers);
 void manager_collect_and_wait(ipc_conn* conn);
 void manager_quit(ipc_conn *conn);
+
+void manager_insert_result(ipc_conn* conn, ipc_result_record* record);
 
 #endif

@@ -2,16 +2,20 @@
 
 #include "types.h"
 #include "util.h"
+#include <openssl/crypto.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <sys/mman.h>
 #include <errno.h>
 
-int manager_init(ipc_conn* conn, const char* root, const char* ipc_path, usz workers) {
+int manager_init(ipc_conn* conn, const char* root, const char* ipc_path, const char* db_path, usz workers) {
 
+    snprintf(conn->temp_path, PATH_MAX, "%s.temp", db_path);
+    snprintf(conn->og_path, PATH_MAX, "%s", db_path);
     int fd;
     if(access(ipc_path, F_OK) != -1) {
         ERRCHECK(remove(ipc_path), "[FileopsManager]: ERROR: Could not remove previously present ipc file %s\n", ipc_path);
@@ -53,6 +57,35 @@ int manager_init(ipc_conn* conn, const char* root, const char* ipc_path, usz wor
 
     header->jobs_waiting++;
 
+    if(access(conn->temp_path, F_OK) != -1) {
+
+        remove(conn->temp_path);
+    }
+
+    if((conn->db = fopen(conn->temp_path, "w+")) == NULL) {
+        fprintf(stderr, "[FileopsManger]: ERROR: Could not open temp db file %s\n", conn->temp_path);
+        perror(NULL);
+        return -1;
+    }
+
+    ipc_db_header dbhead = {
+        .sig = "INV",
+        .complete = 0,
+        .file_records = 0,
+        .format = 1,
+        .workers = workers
+    };
+    conn->db_header = mmap(NULL, sizeof(ipc_db_header), PROT_WRITE | PROT_READ, MAP_SHARED, fileno(conn->db), 0);
+
+    if(conn->db_header == MAP_FAILED) {
+        fprintf(stderr, "[FileopsManger]: ERROR: Could not map temp db header in memory\n");
+        perror(NULL);
+        return 1;
+    }
+
+    fwrite(&dbhead, sizeof(ipc_db_header), 1, conn->db);
+    fflush(conn->db);
+
     return 0;
 }
 
@@ -80,7 +113,8 @@ void manager_collect(ipc_conn* conn, ipc_header* header) {
 
                 nothing = nothing && false;
 
-                // printf("[FileopsManger]: INFO: record %s\n", record->absolute_path);
+                fwrite(record, sizeof(ipc_result_record), 1, conn->db);
+                conn->db_header->file_records++;
             } else {
                 nothing = nothing && true;
             }
@@ -115,17 +149,50 @@ void manager_collect(ipc_conn* conn, ipc_header* header) {
             ipc_result_record* record = &chan->records[chan->records_tail];
             chan->records_tail = (chan->records_tail + 1 ) % QUEUE_CHANNEL_LEN;
 
-            printf("[FileopsManger]: INFO: record %s\n", record->absolute_path);
+            fwrite(record, sizeof(ipc_result_record), 1, conn->db);
+            conn->db_header->file_records++;
         }
     }
+
 }
 
+void copyfile(int fd_a, int fd_b) {
+    usz page_size = sysconf(_SC_PAGE_SIZE);
+    
+    ssize_t bytes_read = 0;
+    char* buf = malloc(page_size);
+    while((bytes_read = read(fd_a, buf, page_size)) != 0) {
+        if(bytes_read == -1) {
+            fprintf(stderr, "[FileopsManager]: ERROR: Could not read from file to copy\n");
+            perror(NULL);
+            exit(1);
+        }
+        ERRCHECK(write(fd_b, buf, bytes_read), "[FileopsManager]: ERROR: Could not write to file for copy\n");
+    }
+
+
+    free(buf);
+}
 void manager_quit(ipc_conn* conn) {
     ERRCHECK(munmap(conn->map, conn->map_size), "[FileopsManager]: ERROR: Could not unmap ipc\n");
+    conn->db_header->complete = 1;
+    msync(conn->db_header, sizeof(ipc_db_header), MS_SYNC);
+
+    if(access(conn->og_path, F_OK) != -1) {
+        remove(conn->og_path);
+    }
+    int og = open(conn->og_path, O_CREAT | O_RDWR, S_IWUSR | S_IRUSR | S_IWOTH | S_IROTH);
+    ERRCHECK(og, "[FileopsManager]: ERROR: Could not open atomic db %s\n", conn->og_path);
+    printf("[FileopsManager]: INFO: Writing atomically to %s\n", conn->og_path);
+    lseek(fileno(conn->db), 0, SEEK_SET);
+    copyfile(fileno(conn->db), og);
+    close(og);
+
     sem_destroy(&conn->header->job_sem);
     sem_destroy(&conn->header->quit_sem);
     sem_destroy(&conn->header->queue_write_sem);
     sem_destroy(&conn->header->queue_read_sem);
+    fclose(conn->db);
 }
 
 void manager_collect_and_wait(ipc_conn* conn) {
@@ -139,4 +206,13 @@ void manager_collect_and_wait(ipc_conn* conn) {
         ERRCHECK(pid = wait(&stat), "[FileopsManager]: ERROR: Could not wait for kid to die\n");
         printf("[FileopsManager]: INFO: kid with pid %d has died with status %d\n", pid, stat);
     }
+
+    ipc_result_channel* channels = (void*)&((ipc_job*)&header[1])[QUEUE_JOB_LEN];
+    for(usz i = 0; i < conn->workers; i++) {
+        ipc_result_channel* chan = &channels[i]; 
+        fwrite(&chan->stats, sizeof(ipc_stats), 1, conn->db);
+    }
+
+    fflush(conn->db);
+
 }

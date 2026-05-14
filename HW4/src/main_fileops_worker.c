@@ -9,6 +9,8 @@
 #include <sys/mman.h>
 #include <sys/dir.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
 #include <openssl/evp.h>
 
 ipc_job* global_job_stack = NULL;
@@ -168,6 +170,10 @@ int main(int argc, char** argv) {
 
 
     printf("[FileopsWorker %llu]: INFO: Children with pid %d of %d speaking! Yessir!\n", id, getpid(), getppid());
+    ipc_result_channel* channels = (void*)&job_queue[QUEUE_JOB_LEN];
+    channels[id].stats.worker_id = id;
+    channels[id].stats.pid = getpid();
+
 
     while(1) {
 
@@ -181,9 +187,7 @@ int main(int argc, char** argv) {
 
         ERRCHECK(sem_post(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not post job semaphore\n", id);
 
-
-        sem_wait(&header->queue_read_sem);
-
+    
         ERRCHECK(sem_wait(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not wait for job semaphore\n", id);
         if(header->jobs_waiting == 0 && header->jobs_running == 0 && stack_at_end()) {
             printf("[FileopsWorker %llu] INFO: My job here is done\n", id);
@@ -202,7 +206,13 @@ int main(int argc, char** argv) {
             header->jobs_waiting--;
             ERRCHECK(sem_post(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not post job semaphore\n", id);
         } else {
+            sem_wait(&header->queue_read_sem);
             ERRCHECK(sem_wait(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not wait for job semaphore\n", id);
+
+            if(header->jobs_waiting == 0) {
+                ERRCHECK(sem_post(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not post job semaphore\n", id);
+                continue;
+            }
             memcpy(job.path, job_queue[header->queue_tail].path, DB_STRING_LEN);
             header->queue_tail = (header->queue_tail + 1) % QUEUE_JOB_LEN;
 
@@ -266,6 +276,8 @@ int main(int argc, char** argv) {
                 rec->last_modification = stat.st_mtime;
                 rec->mode = mode;
                 rec->size = stat.st_size;
+                chan->stats.files_emitted++;
+                chan->stats.bytes_emitted += sizeof(ipc_result_record);
 
                 ERRCHECK(sem_post(&channels[id].sem), "[FileopsWorker %llu]: ERROR: Could not post channel %llu semaphore\n", id, id);
                 ERRCHECK(sem_post(&channels[id].read_sem), "[FileopsWorker %llu]: ERROR: Could not post channel %llu read semaphore\n", id, id);
@@ -283,8 +295,8 @@ int main(int argc, char** argv) {
                         ERRCHECK(sem_wait(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not wait for queue semaphore\n", id);
                         header->jobs_waiting++;
                         ERRCHECK(sem_post(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not post job semaphore\n", id);
-                        ERRCHECK(sem_post(&header->queue_read_sem), "[FileopsWorker %llu]: ERROR: Could not post queue read semaphore\n", id);
                         // printf("[FileopsWorker %llu]: INFO: Registered new internal job %s\n", id, p);
+                        continue;
                     }else {
                         fprintf(stderr, "ERROR\n");
                         perror(0);
@@ -311,7 +323,8 @@ int main(int argc, char** argv) {
 
         closedir(dir);
 
-        printf("[FileopsWorker %llu]: INFO: Consumed job %s\n", id, job.path);
+        channels[id].stats.jobs_processed++;
+        
 
         ERRCHECK(sem_wait(&header->job_sem), "[FileopsWorker %llu]: ERROR: Could not wait for job semaphore\n", id);
         header->jobs_running--;
@@ -322,10 +335,14 @@ int main(int argc, char** argv) {
     ASSERT(0, "UNREACHABLE");
 
 cleanup:
-
-    ipc_result_channel* channels = (void*)&job_queue[QUEUE_JOB_LEN];
     ipc_result_channel* chan = &channels[id];
     ERRCHECK(sem_wait(&chan->sem), "[FileopsWorker %llu]: ERROR: Could not wait for result channel semaphore", id);
+
+    struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    chan->stats.user_cpu_us = usage.ru_utime.tv_sec * 1000000 + usage.ru_utime.tv_usec;
+    chan->stats.sys_cpu_us = usage.ru_stime.tv_sec * 1000000 + usage.ru_stime.tv_usec;
+    chan->stats.exit_status = 0;
 
     chan->done = true;
 
