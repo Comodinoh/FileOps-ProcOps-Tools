@@ -1,0 +1,6 @@
+[FileopsManager]: INFO: Sir im the parent here sir of Worker no. 0! What can I do for you!
+[FileopsManager]: INFO: Sir im the parent here sir of Worker no. 1! What can I do for you!
+STATUS queued_jobs=0 active_jobs=1 files=0 bytes=0 workers_alive=2 complete=0
+[FileopsWorker 0]: INFO: Children with pid 42323 of 42322 speaking! Yessir!
+[FileopsWorker 1]: INFO: Children with pid 42324 of 42322 speaking! Yessir!
+[FileopsManager]: INFO: All kids are dead sir! Im gonna die too! Hope you arent gonna miss me...
